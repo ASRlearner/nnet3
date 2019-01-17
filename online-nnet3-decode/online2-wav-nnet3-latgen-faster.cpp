@@ -109,11 +109,11 @@ int main(int argc, char *argv[]) {
         OnlineEndpointConfig endpoint_opts;
 
         //每一块的秒数
-        BaseFloat chunk_length_secs = 0.18;
+        BaseFloat chunk_length_secs = -1.0;
         //不使用断点检测
         bool do_endpointing = false;
         //配置false可以阻止在线ivector的估计 使用一条语音的所有数据
-        bool online = true;
+        //bool online = false;
 
         po.Register("chunk-length", &chunk_length_secs,
                     "Length of chunk size in seconds, that we process.  Set to <= 0 "
@@ -122,15 +122,15 @@ int main(int argc, char *argv[]) {
                     "Symbol table for words [for debug output]");
         po.Register("do-endpointing", &do_endpointing,
                     "If true, apply endpoint detection");
-        po.Register("online", &online,
-                    "You can set this to false to disable online iVector estimation "
-                    "and have all the data for each utterance used, even at "
-                    "utterance start.  This is useful where you just want the best "
-                    "results and don't care about online operation.  Setting this to "
-                    "false has the same effect as setting "
-                    "--use-most-recent-ivector=true and --greedy-ivector-extractor=true "
-                    "in the file given to --ivector-extraction-config, and "
-                    "--chunk-length=-1.");
+//        po.Register("online", &online,
+//                    "You can set this to false to disable online iVector estimation "
+//                    "and have all the data for each utterance used, even at "
+//                    "utterance start.  This is useful where you just want the best "
+//                    "results and don't care about online operation.  Setting this to "
+//                    "false has the same effect as setting "
+//                    "--use-most-recent-ivector=true and --greedy-ivector-extractor=true "
+//                    "in the file given to --ivector-extraction-config, and "
+//                    "--chunk-length=-1.");
         po.Register("num-threads-startup", &g_num_threads,
                     "Number of threads used when initializing iVector extractor.");
 
@@ -164,16 +164,19 @@ int main(int argc, char *argv[]) {
          //负责存储OnlineNnet2FeaturePipeline的配置变量、对象和选项
         OnlineNnet2FeaturePipelineInfo feature_info(feature_opts);
 
-        //如果不使用online ivector 则设置ivector-extractor的参数
-        if (!online) {
-            //如果为真 总是使用最新可用的ivector，
-            //而并非那些指定帧的ivector
-            feature_info.ivector_extractor_info.use_most_recent_ivector = true;
-            //如果为真，提取ivector时尽可能多的读取我们现有可用的帧。可能会改善ivector的质量
-            feature_info.ivector_extractor_info.greedy_ivector_extractor = true;
-            //读取所有输入作为一块
-            chunk_length_secs = -1.0;
-        }
+        if(feature_info.mfcc_opts.frame_opts.samp_freq==8000)
+        feature_info.pitch_opts.samp_freq=8000;
+
+//        //如果不使用online ivector 则设置ivector-extractor的参数
+//        if (!online) {
+//            //如果为真 总是使用最新可用的ivector，
+//            //而并非那些指定帧的ivector
+//            feature_info.ivector_extractor_info.use_most_recent_ivector = true;
+//            //如果为真，提取ivector时尽可能多的读取我们现有可用的帧。可能会改善ivector的质量
+//            feature_info.ivector_extractor_info.greedy_ivector_extractor = true;
+//            //读取所有输入作为一块
+//            chunk_length_secs = -1.0;
+//        }
 
         //读取神经网络声学模型
         TransitionModel trans_model;
@@ -241,8 +244,8 @@ int main(int argc, char *argv[]) {
             const std::vector<std::string> &uttlist = spk2utt_reader.Value();
             //存储了在线ivector提取器的自适应状态
             //更加有益的初始化同一个说话人下一条语音的自适应状态(可以不受之前说话人的影响初始化自适应状态)
-            OnlineIvectorExtractorAdaptationState adaptation_state(
-                    feature_info.ivector_extractor_info);
+//            OnlineIvectorExtractorAdaptationState adaptation_state(
+//                    feature_info.ivector_extractor_info);
             //对当前说话人的所有音频文件进行一个遍历 进行解码
             for (size_t i = 0; i < uttlist.size(); i++) {
                 std::string utt = uttlist[i];
@@ -262,13 +265,13 @@ int main(int argc, char *argv[]) {
                 OnlineNnet2FeaturePipeline feature_pipeline(feature_info);
 
                 //设定与上一条语音的同一个说话人自适应状态 包括cmvn的自适应状态 ivector维度等等
-                feature_pipeline.SetAdaptationState(adaptation_state);
+//                feature_pipeline.SetAdaptationState(adaptation_state);
 
                 //保留来自解码器的最佳路径回溯 解码时静音相关的设置
-                OnlineSilenceWeighting silence_weighting(
-                        trans_model,
-                        feature_info.silence_weighting_config,
-                        decodable_opts.frame_subsampling_factor);
+//                OnlineSilenceWeighting silence_weighting(
+//                        trans_model,
+//                        feature_info.silence_weighting_config,
+//                        decodable_opts.frame_subsampling_factor);
 
                 //使用nnet3神经网络模型解码一段语音时使用的解码器
                 SingleUtteranceNnet3Decoder decoder(decoder_opts, trans_model,
@@ -291,7 +294,7 @@ int main(int argc, char *argv[]) {
                 }
 
                 int32 samp_offset = 0;
-                std::vector<std::pair<int32, BaseFloat> > delta_weights;
+                //std::vector<std::pair<int32, BaseFloat> > delta_weights;
 
                 //音频数据的偏置值
                 while (samp_offset < data.Dim()) {
@@ -310,7 +313,7 @@ int main(int argc, char *argv[]) {
                     //偏置值按当前提取的数据递增
                     samp_offset += num_samp;
                     //模拟等待与当前语音长度相同的时间
-                    decoding_timer.WaitUntil(samp_offset / samp_freq);
+                    //decoding_timer.WaitUntil(samp_offset / samp_freq);
                     //如果偏置值等于音频数据总长度
                     if (samp_offset == data.Dim()) {
                         //没有更多的特征了 ,清洗最后几帧
@@ -319,23 +322,23 @@ int main(int argc, char *argv[]) {
                     }
 
                     //如果静音权重非1且静音字符串非空 并且ivector特征非空
-                    if (silence_weighting.Active() &&
-                        feature_pipeline.IvectorFeature() != NULL) {
-                        //计算当前回溯路径 decoder.Decoder()返回在线词图解码器
-                        silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
-                        //调用该函数获取权重的变化
-                        silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
-                                                          &delta_weights);
-                        //将变化的权重提供给ivector特征
-                        feature_pipeline.IvectorFeature()->UpdateFrameWeights(delta_weights);
-                    }
+//                    if (silence_weighting.Active() &&
+//                        feature_pipeline.IvectorFeature() != NULL) {
+//                        //计算当前回溯路径 decoder.Decoder()返回在线词图解码器
+//                        silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
+//                        //调用该函数获取权重的变化
+//                        silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
+//                                                          &delta_weights);
+//                        //将变化的权重提供给ivector特征
+//                        feature_pipeline.IvectorFeature()->UpdateFrameWeights(delta_weights);
+//                    }
 
                     //加速解码
                     decoder.AdvanceDecoding();
                     //是否使用断点检测
-                    if (do_endpointing && decoder.EndpointDetected(endpoint_opts)) {
-                        break;
-                    }
+//                    if (do_endpointing && decoder.EndpointDetected(endpoint_opts)) {
+//                        break;
+//                    }
                 }
                 //完成解码 清理剩余token 加快词图的获取
                 decoder.FinalizeDecoding();
@@ -359,7 +362,7 @@ int main(int argc, char *argv[]) {
                 // In an application you might avoid updating the adaptation state if
                 // you felt the utterance had low confidence.  See lat/confidence.h
                 //这是为了在你认为语音自信度不高的情况下避免更新自适应状态
-                feature_pipeline.GetAdaptationState(&adaptation_state);
+                //feature_pipeline.GetAdaptationState(&adaptation_state);
 
                 // we want to output the lattice with un-scaled acoustics.
                 //打印词图
@@ -372,7 +375,7 @@ int main(int argc, char *argv[]) {
                 num_done++;
             }
         }
-        timing_stats.Print(online);
+        //timing_stats.Print(online);
 
         KALDI_LOG << "Decoded " << num_done << " utterances, "
                   << num_err << " with errors.";

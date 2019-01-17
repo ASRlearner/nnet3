@@ -7,11 +7,6 @@
 
 #endif //NNET_TEST_ONLINEVECTORINPUT_H
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
 
 #include "online/online-feat-input.h"
 #include "feat/feature-functions.h"
@@ -21,21 +16,34 @@
 using namespace kaldi;
 
 
-class OnlineVectorInput : public OnlineFeatInputItf{
+//通过portaudio采集音频到缓冲区
+// 然后通过缓冲区读取定长数据到矩阵中 矩阵为1行n列的矩阵 方便后续处理
+class OnlineAudioMatrix{
 public:
-    OnlineVectorInput(int32 udp_port,int32 nsample);
-
-    virtual bool Compute(Matrix<BaseFloat > *output);
-    //返回音频数据的长度
-    virtual int32 Dim() const { return read_nsamples;}
-    //返回客户端网络地址结构
-    const sockaddr_in& client_addr() const { return client_addr_;}
-    //返回套接字描述符
-    const int32 socket_desc() const { return  socket_desc_;}
+    OnlineAudioMatrix(OnlineAudioSourceItf *input,int32 nsamples);
+    //将定长音频数据点存储到矩阵中输出
+    bool compute(Matrix<BaseFloat > &output);
 private:
-    std::queue<Vector<BaseFloat >> buf;
-    int32 read_nsamples;
-    int32 socket_desc_;
-    sockaddr_in client_addr_;
-    sockaddr_in server_addr_;
+    //portaudio对象
+    OnlineAudioSourceItf *input;
+    //需要采样的音频数据点数
+    int32  nsamples;
 };
+
+OnlineAudioMatrix::OnlineAudioMatrix(OnlineAudioSourceItf *input,
+                                      int32 nsamples):input(input),
+                                      nsamples(nsamples){}
+
+bool OnlineAudioMatrix::compute(Matrix<BaseFloat> &output) {
+    Vector<BaseFloat > buf(nsamples);
+    //从缓冲区中读取定长音频数据到vector
+    bool ans=input->Read(&buf);
+    std::cout<< buf.Dim()<<std::endl;
+    //定义输出矩阵的规格为行向量 长度为得到的音频数据点数
+    output.Resize(1,buf.Dim());
+    //把vector中数据全部拷贝到矩阵中
+    for(int i=0;i<buf.Dim();i++)
+        (output)(0,i)=buf(i);
+
+    return ans;
+}
